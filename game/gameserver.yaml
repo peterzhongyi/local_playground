@@ -1,0 +1,22 @@
+apiVersion: "agones.dev/v1"
+kind: GameServer
+metadata:
+  name: "survival-game"
+spec:
+  ports:
+  - name: default
+    portPolicy: Dynamic
+    containerPort: 3000
+  template:
+    spec:
+      containers:
+      - name: survival-game
+        image: us-central1-docker.pkg.dev/peteryizhong-gke-dev/peteryizhong-repository/survival-game:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m" 

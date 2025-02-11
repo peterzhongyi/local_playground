@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-bot
+  template:
+    metadata:
+      labels:
+        app: game-bot
+    spec:
+      containers:
+      - name: game-bot
+        image: us-central1-docker.pkg.dev/peteryizhong-gke-dev/peteryizhong-repository/bot:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m" 
