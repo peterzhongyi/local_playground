@@ -78,8 +78,8 @@ class GameBot:
     async def send_chat_response(self, received_message):
         try:
             # Get response from LLM
-            context = f"You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. A human has sent you this message: {received_message}. How do you respond?"
-            llm_response = await self.query_llm(context + received_message)
+            prompt = f"You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. A human has sent you this message: {received_message}. How do you respond?"
+            llm_response = await self.query_llm(prompt)
             
             if llm_response:
                 # Send the response
