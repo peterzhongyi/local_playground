@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get LLM service URL from environment variable or use default
-LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://gemma-2b-it.default.svc.cluster.local/generate')
+LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', '')
 
 class GameBot:
     def __init__(self):
@@ -59,10 +59,10 @@ class GameBot:
     async def query_llm(self, prompt):
         try:
             payload = {
-                "inputs": f"<start_of_turn>user\n{prompt}<end_of_turn>\n",
+                "inputs": prompt,
                 "parameters": {
-                    "temperature": 0.90,
-                    "top_p": 0.95,
+                    "temperature": 0.70,
+                    "top_p": 0.9,
                     "max_new_tokens": 128
                 }
             }
@@ -78,7 +78,8 @@ class GameBot:
     async def send_chat_response(self, received_message):
         try:
             # Get response from LLM
-            llm_response = await self.query_llm(received_message)
+            context = f"You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. A human has sent you this message: {received_message}. How do you respond?"
+            llm_response = await self.query_llm(context + received_message)
             
             if llm_response:
                 # Send the response
@@ -88,25 +89,38 @@ class GameBot:
                     'message': response_text
                 }))
                 logger.info(f"Sent LLM response: {response_text}")
+
+                # Check if response implies movement and move accordingly
+                await self.handle_movement_from_response(response_text.lower())
         except Exception as e:
             logger.error(f"Error sending chat response: {e}")
             self.connected = False
 
-    async def move_randomly(self):
-        while True:
-            if self.connected:
-                direction = random.choice(['up', 'down', 'left', 'right'])
-                try:
-                    await self.websocket.send(json.dumps({
+    async def handle_movement_from_response(self, response_text):
+        try:
+            # Query LLM to determine movement
+            movement_prompt = f"""Given your response: "{response_text}"
+            Should you move? If yes, choose exactly one word from these options: "up", "down", "left" or "right". If no, output "no_movement".
+            Don't output anything else."""
+            
+            movement_response = await self.query_llm(movement_prompt)
+            print("movement_response is:")
+            print(movement_response)
+            
+            if movement_response:
+                movement_text = movement_response.get('generated_text', '').strip().lower()
+                logger.info(f"Movement text from LLM: {movement_text}")
+                if movement_text != 'no_movement' and movement_text in ['up', 'down', 'left', 'right']:
+                    movement_json = {
                         'type': 'move',
-                        'direction': direction
-                    }))
-                    logger.info(f"Moving {direction}")
-                except Exception as e:
-                    logger.error(f"Error sending move: {e}")
-                    self.connected = False
-                    break
-            await asyncio.sleep(5)
+                        'direction': movement_text
+                    }
+                    await self.websocket.send(json.dumps(movement_json))
+                    logger.info(f"Moving {movement_text} based on response: {response_text}")
+                        
+        except Exception as e:
+            logger.error(f"Error handling movement from response: {e}")
+            self.connected = False
 
     async def reconnect_if_needed(self):
         while True:
@@ -121,14 +135,13 @@ async def main():
     # First ensure we're connected
     await bot.connect()
     
-    # Create remaining tasks only after connection is established
+    # Create remaining tasks
     tasks = [
         asyncio.create_task(bot.handle_messages()),
-        asyncio.create_task(bot.move_randomly()),
         asyncio.create_task(bot.reconnect_if_needed())
     ]
     
-    # Run remaining tasks concurrently
+    # Run tasks concurrently
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

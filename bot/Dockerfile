@@ -9,4 +9,4 @@ RUN pip install -r requirements.txt
 # Copy bot code
 COPY ai_bot.py .
 
-CMD ["python", "ai_bot.py"] 
+CMD ["python", "-u", "ai_bot.py"] 
