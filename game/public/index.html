@@ -28,16 +28,74 @@
         .ai {
             background-color: #f44336;
         }
+        /* Chat styles */
+        .game-container {
+            display: flex;
+            gap: 20px;
+        }
+        .chat-container {
+            width: 300px;
+            height: 500px;
+            border: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin: 5px;
+            padding: 8px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        .player-message {
+            background-color: #4CAF50;
+            color: white;
+            align-self: flex-end;
+        }
+        .bot-message {
+            background-color: #f1f1f1;
+            align-self: flex-start;
+        }
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            background-color: white;
+            border-top: 1px solid #ccc;
+        }
+        .chat-input input {
+            flex-grow: 1;
+            padding: 5px;
+            margin-right: 5px;
+        }
+        .chat-input button {
+            padding: 5px 15px;
+        }
     </style>
 </head>
 <body>
     <h1>Survival Game</h1>
-    <div id="grid" class="grid"></div>
-    <div id="controls">
-        <button onclick="move('up')">Up</button>
-        <button onclick="move('down')">Down</button>
-        <button onclick="move('left')">Left</button>
-        <button onclick="move('right')">Right</button>
+    <div class="game-container">
+        <div>
+            <div id="grid" class="grid"></div>
+            <div id="controls">
+                <button onclick="move('up')">Up</button>
+                <button onclick="move('down')">Down</button>
+                <button onclick="move('left')">Left</button>
+                <button onclick="move('right')">Right</button>
+            </div>
+        </div>
+        <div class="chat-container">
+            <div id="chatMessages" class="chat-messages"></div>
+            <div class="chat-input">
+                <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -66,6 +124,10 @@
             
             if (data.type === 'gameState' || data.type === 'init') {
                 updateGrid(data.gameState);
+            }
+            
+            if (data.type === 'chat') {
+                addMessage(data.from, data.message);
             }
         };
 
@@ -108,6 +170,33 @@
                     break;
             }
         });
+
+        function addMessage(from, text) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${from === playerId ? 'player-message' : 'bot-message'}`;
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (message) {
+                ws.send(JSON.stringify({
+                    type: 'chat',
+                    message: message
+                }));
+                input.value = '';
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
     </script>
 </body>
 </html> 

@@ -16,6 +16,9 @@ spec:
       - name: game-bot
         image: us-central1-docker.pkg.dev/peteryizhong-gke-dev/peteryizhong-repository/bot:latest
         imagePullPolicy: Always
+        env:
+        - name: LLM_SERVICE_URL
+          value: "http://llm-service:8000/generate"
         resources:
           requests:
             memory: "64Mi"

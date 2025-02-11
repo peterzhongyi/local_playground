@@ -107,6 +107,20 @@ wss.on('connection', async (ws, req) => {
             // Broadcast updated state
             broadcastGameState();
         }
+        else if (data.type === 'chat') {
+            // Broadcast chat message to all clients
+            const chatMessage = JSON.stringify({
+                type: 'chat',
+                from: playerId,
+                message: data.message
+            });
+            
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(chatMessage);
+                }
+            });
+        }
     });
 
     // Handle client disconnect
