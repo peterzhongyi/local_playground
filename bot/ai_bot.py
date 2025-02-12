@@ -5,6 +5,7 @@ import random
 import logging
 import requests
 import os
+from difflib import get_close_matches
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,14 +15,16 @@ LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', '')
 
 class GameBot:
     def __init__(self):
-        self.server_url = "ws://34.46.118.8:7117?type=ai"
+        self.server_url = f"ws://{os.getenv('GAME_SERVER_HOST', 'localhost')}:{os.getenv('GAME_SERVER_PORT', '7117')}?type=ai"
         self.player_id = None
         self.connected = False
-        self.conversation_history = []  # Keep track of conversation for context
+        self.conversation_history = []  # List of (speaker, message) tuples
+        self.max_history = 5  # Keep last 5 messages for context
 
     async def connect(self):
         while not self.connected:
             try:
+                print(f"Connecting to server at {self.server_url}")
                 self.websocket = await websockets.connect(self.server_url)
                 self.connected = True
                 logger.info("Connected to game server")
@@ -58,16 +61,21 @@ class GameBot:
 
     async def query_llm(self, prompt):
         try:
+            print(f"Processing prompt --- {prompt}")
             payload = {
-                "inputs": prompt,
+                "inputs": f"<start_of_turn>user\n{prompt}<end_of_turn>\n",
                 "parameters": {
-                    "temperature": 0.70,
-                    "top_p": 0.9,
+                    "temperature": 0.1,
+                    "top_p": 0.95,
                     "max_new_tokens": 128
                 }
             }
+
+            headers = {
+                "Content-Type": "application/json"
+            }
             
-            response = requests.post(LLM_SERVICE_URL, json=payload)
+            response = requests.post(LLM_SERVICE_URL, json=payload, headers=headers)
             response.raise_for_status()
             
             return response.json()
@@ -77,13 +85,28 @@ class GameBot:
 
     async def send_chat_response(self, received_message):
         try:
+            # Add received message to history
+            self.conversation_history.append(("human", received_message))
+            self.conversation_history = self.conversation_history[-self.max_history:]  # Keep last N messages
+
+            # Build conversation context
+            conversation_context = "\n".join([
+                f"{'Human' if speaker == 'human' else 'You'}: {message}"
+                for speaker, message in self.conversation_history
+            ])
+
             # Get response from LLM
-            prompt = f"You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. A human has sent you this message: {received_message}. How do you respond?"
+            prompt = f"""You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. Here's your previous conversation: [{conversation_context}] What do you say in a simple sentence?"""
+            
             llm_response = await self.query_llm(prompt)
             
             if llm_response:
                 # Send the response
-                response_text = llm_response.get('generated_text', 'I cannot respond right now.')
+                response_text = llm_response.get('generated_text', 'I cannot respond right now.').strip()
+                # Add bot's response to history
+                self.conversation_history.append(("bot", response_text))
+                self.conversation_history = self.conversation_history[-self.max_history:]  # Keep last N messages
+                
                 await self.websocket.send(json.dumps({
                     'type': 'chat',
                     'message': response_text
@@ -98,26 +121,31 @@ class GameBot:
 
     async def handle_movement_from_response(self, response_text):
         try:
-            # Query LLM to determine movement
-            movement_prompt = f"""Given your response: "{response_text}"
-            Should you move? If yes, choose exactly one word from these options: "up", "down", "left" or "right". If no, output "no_movement".
-            Don't output anything else."""
+            # Query LLM to determine movement, including conversation context
+            conversation_context = "\n".join([
+                f"{'Human' if speaker == 'human' else 'You'}: {message}"
+                for speaker, message in self.conversation_history  # Use full conversation history for movement context
+            ])
+
+            movement_prompt = f"""You are a bot. You are in a 10x10 grid. You can move up, down, left, or right in the grid. What do you do now? IMPORTANT: SAY EXACTLY ONE WORD from ["up", "down", "left", "right"]. Previous conversation: [{conversation_context}]"""
             
             movement_response = await self.query_llm(movement_prompt)
-            print("movement_response is:")
-            print(movement_response)
-            
+                        
             if movement_response:
+                print(f"movement_response --- {movement_response}")
                 movement_text = movement_response.get('generated_text', '').strip().lower()
-                logger.info(f"Movement text from LLM: {movement_text}")
-                if movement_text != 'no_movement' and movement_text in ['up', 'down', 'left', 'right']:
+                print(f"movement_text turns out to be --- {movement_text}")
+                directions = ['up', 'down', 'left', 'right']
+                
+                if movement_text in directions:
                     movement_json = {
                         'type': 'move',
                         'direction': movement_text
                     }
                     await self.websocket.send(json.dumps(movement_json))
                     logger.info(f"Moving {movement_text} based on response: {response_text}")
-                        
+                else:
+                    logger.info(f"Staying in place based on response: {response_text}")
         except Exception as e:
             logger.error(f"Error handling movement from response: {e}")
             self.connected = False

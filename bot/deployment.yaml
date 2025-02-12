@@ -19,6 +19,10 @@ spec:
         env:
         - name: LLM_SERVICE_URL
           value: "http://llm-service:8000/generate"
+        - name: GAME_SERVER_HOST
+          value: "34.71.172.199"
+        - name: GAME_SERVER_PORT
+          value: "7117"
         resources:
           requests:
             memory: "64Mi"
